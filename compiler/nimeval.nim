@@ -165,3 +165,13 @@ proc runRepl*(r: TLLRepl;
   if supportNimscript: graph.vm = setupVM(m, cache, "stdin", graph)
   graph.compileSystemModule()
   processModule(graph, m, llStreamOpenStdIn(r))
+
+when callVMExecHooks:
+  proc registerExitHook*(i: Interpreter, hook: proc (c: PCtx, pc: int, tos: PStackFrame)) =
+    (PCtx i.graph.vm).exitHook = hook
+
+  proc registerEnterHook*(i: Interpreter, hook: proc (c: PCtx, pc: int, tos: PStackFrame, instr: TInstr)) =
+    (PCtx i.graph.vm).enterHook = hook
+
+  proc registerLeaveHook*(i: Interpreter, hook: proc (c: PCtx, pc: int, tos: PStackFrame, instr: TInstr)) =
+    (PCtx i.graph.vm).leaveHook = hook
