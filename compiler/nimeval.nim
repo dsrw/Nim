@@ -10,9 +10,9 @@
 ## exposes the Nim VM to clients.
 import
   ast, astalgo, modules, passes, condsyms,
-  options, sem, semdata, llstream, vm, vmdef,
-  modulegraphs, idents, os, pathutils, passaux,
-  scriptconfig
+  options, sem, semdata, llstream, lineinfos, vm,
+  vmdef, modulegraphs, idents, os, pathutils,
+  passaux, scriptconfig
 
 type
   Interpreter* = ref object ## Use Nim as an interpreter with this object
@@ -160,3 +160,18 @@ proc runRepl*(r: TLLRepl;
   if supportNimscript: graph.vm = setupVM(m, cache, "stdin", graph)
   graph.compileSystemModule()
   processModule(graph, m, llStreamOpenStdIn(r))
+
+proc registerErrorHook*(i: Interpreter, hook:
+                        proc (config: ConfigRef; info: TLineInfo; msg: string;
+                              severity: Severity) {.gcsafe.}) =
+  i.graph.config.structuredErrorHook = hook
+
+when callVMExecHooks:
+  proc registerExitHook*(i: Interpreter, hook: proc (c: PCtx, pc: int, tos: PStackFrame)) =
+    (PCtx i.graph.vm).exitHook = hook
+
+  proc registerEnterHook*(i: Interpreter, hook: proc (c: PCtx, pc: int, tos: PStackFrame, instr: TInstr)) =
+    (PCtx i.graph.vm).enterHook = hook
+
+  proc registerLeaveHook*(i: Interpreter, hook: proc (c: PCtx, pc: int, tos: PStackFrame, instr: TInstr)) =
+    (PCtx i.graph.vm).leaveHook = hook
