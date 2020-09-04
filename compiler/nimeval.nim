@@ -30,20 +30,27 @@ iterator exportedSymbols*(i: Interpreter): PSym =
     s = nextIter(it, i.mainModule.tab)
 
 proc selectUniqueSymbol*(i: Interpreter; name: string;
-                         symKinds: set[TSymKind] = {skLet, skVar}): PSym =
+                         symKinds: set[TSymKind] = {skLet, skVar};
+                         moduleName = ""): PSym =
   ## Can be used to access a unique symbol of ``name`` and
   ## the given ``symKinds`` filter.
   assert i != nil
-  assert i.mainModule != nil, "no main module selected"
+  var module = i.mainModule
+  if moduleName != "":
+    for m in i.graph.modules:
+      if m != nil and m.name.s == moduleName:
+        module = m
+        break
+  assert module != nil, "no module selected"
   let n = getIdent(i.graph.cache, name)
   var it: TIdentIter
-  var s = initIdentIter(it, i.mainModule.tab, n)
+  var s = initIdentIter(it, module.tab, n)
   result = nil
   while s != nil:
     if s.kind in symKinds:
       if result == nil: result = s
       else: return nil # ambiguous
-    s = nextIdentIter(it, i.mainModule.tab)
+    s = nextIdentIter(it, module.tab)
 
 proc selectRoutine*(i: Interpreter; name: string): PSym =
   ## Selects a declared routine (proc/func/etc) from the main module.
