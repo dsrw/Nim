@@ -52,12 +52,13 @@ proc selectUniqueSymbol*(i: Interpreter; name: string;
       else: return nil # ambiguous
     s = nextIdentIter(it, module.tab)
 
-proc selectRoutine*(i: Interpreter; name: string): PSym =
+proc selectRoutine*(i: Interpreter; name: string, moduleName = ""): PSym =
   ## Selects a declared routine (proc/func/etc) from the main module.
   ## The routine needs to have the export marker ``*``. The only matching
   ## routine is returned and ``nil`` if it is overloaded.
   result = selectUniqueSymbol(i, name, {skTemplate, skMacro, skFunc,
-                                        skMethod, skProc, skConverter})
+                                        skMethod, skProc, skConverter},
+                              moduleName)
 
 proc callRoutine*(i: Interpreter; routine: PSym; args: openArray[PNode]): PNode =
   assert i != nil
