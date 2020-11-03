@@ -18,7 +18,7 @@ type
   Interpreter* = ref object ## Use Nim as an interpreter with this object
     mainModule: PSym
     graph*: ModuleGraph
-    scriptName: string
+    scriptName*: string
 
 iterator exportedSymbols*(i: Interpreter): PSym =
   assert i != nil
