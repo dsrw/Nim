@@ -193,12 +193,12 @@ proc processSpecificNote*(arg: string, state: TSpecialWord, pass: TCmdLinePass,
   elif i < arg.len and (arg[i] in {':', '='}): inc(i)
   else: invalidCmdLineOption(conf, pass, orig, info)
   if state == wHint:
-    let x = findStr(lineinfos.HintsToStr, id)
-    if x >= 0: n = TNoteKind(x + ord(hintMin))
+    let x = findStr(hintMin..hintMax, id, errUnknown)
+    if x != errUnknown: n = TNoteKind(x)
     else: localError(conf, info, "unknown hint: " & id)
   else:
-    let x = findStr(lineinfos.WarningsToStr, id)
-    if x >= 0: n = TNoteKind(x + ord(warnMin))
+    let x = findStr(warnMin..warnMax, id, errUnknown)
+    if x != errUnknown: n = TNoteKind(x)
     else: localError(conf, info, "unknown warning: " & id)
 
   var val = substr(arg, i).normalize
@@ -485,7 +485,10 @@ proc processSwitch*(switch, arg: string, pass: TCmdLinePass, info: TLineInfo;
   of "project":
     processOnOffSwitchG(conf, {optWholeProject, optGenIndex}, arg, pass, info)
   of "gc":
-    if conf.backend == backendJs:
+    if conf.backend == backendJs or conf.command == "js":
+      # for: bug #16033
+      # This might still be imperfect, in rarse corner cases
+      # (where command is reset in nimscript, maybe).
       return
     expectArg(conf, switch, arg, pass, info)
     if pass in {passCmd2, passPP}:

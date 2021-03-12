@@ -242,7 +242,7 @@ proc readDataStr*(s: Stream, buffer: var string, slice: Slice[int]): int =
     result = s.readDataStrImpl(s, buffer, slice)
   else:
     # fallback
-    result = s.readData(addr buffer[0], buffer.len)
+    result = s.readData(addr buffer[slice.a], slice.b + 1 - slice.a)
 
 template jsOrVmBlock(caseJsOrVm, caseElse: untyped): untyped =
   when nimvm:
@@ -1520,17 +1520,3 @@ when false:
       var handle = open(filename, flags)
       if handle < 0: raise newEOS("posix.open() call failed")
     result = newFileHandleStream(handle)
-
-when isMainModule and defined(testing):
-  var ss = newStringStream("The quick brown fox jumped over the lazy dog.\nThe lazy dog ran")
-  assert(ss.getPosition == 0)
-  assert(ss.peekStr(5) == "The q")
-  assert(ss.getPosition == 0) # haven't moved
-  assert(ss.readStr(5) == "The q")
-  assert(ss.getPosition == 5) # did move
-  assert(ss.peekLine() == "uick brown fox jumped over the lazy dog.")
-  assert(ss.getPosition == 5) # haven't moved
-  var str = newString(100)
-  assert(ss.peekLine(str))
-  assert(str == "uick brown fox jumped over the lazy dog.")
-  assert(ss.getPosition == 5) # haven't moved

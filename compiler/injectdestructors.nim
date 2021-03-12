@@ -37,7 +37,7 @@ type
     g: ControlFlowGraph
     graph: ModuleGraph
     otherRead: PNode
-    inLoop, inSpawn: int
+    inLoop, inSpawn, inLoopCond: int
     uninit: IntSet # set of uninit'ed vars
     uninitComputed: bool
 
@@ -295,8 +295,8 @@ proc isNoInit(dest: PNode): bool {.inline.} =
   result = dest.kind == nkSym and sfNoInit in dest.sym.flags
 
 proc genSink(c: var Con; dest, ri: PNode, isDecl = false): PNode =
-  if isUnpackedTuple(dest) or isDecl or
-      (isAnalysableFieldAccess(dest, c.owner) and isFirstWrite(dest, c)) or
+  if (c.inLoopCond == 0 and (isUnpackedTuple(dest) or isDecl or
+      (isAnalysableFieldAccess(dest, c.owner) and isFirstWrite(dest, c)))) or
       isNoInit(dest):
     # optimize sink call into a bitwise memcopy
     result = newTree(nkFastAsgn, dest, ri)
@@ -588,8 +588,10 @@ template handleNestedTempl(n, processCall: untyped, willProduceStmt = false) =
 
   of nkWhileStmt:
     inc c.inLoop
+    inc c.inLoopCond
     result = copyNode(n)
     result.add p(n[0], c, s, normal)
+    dec c.inLoopCond
     var bodyScope = nestedScope(s)
     let bodyResult = p(n[1], c, bodyScope, normal)
     result.add processScope(c, bodyScope, bodyResult)
@@ -823,14 +825,10 @@ proc p(n: PNode; c: var Con; s: var Scope; mode: ProcessMode): PNode =
     of nkAsgn, nkFastAsgn:
       if hasDestructor(c, n[0].typ) and n[1].kind notin {nkProcDef, nkDo, nkLambda} and
           not isCursor(n[0], c):
-        # rule (self-assignment-removal):
-        if n[1].kind == nkSym and n[0].kind == nkSym and n[0].sym == n[1].sym:
-          result = newNodeI(nkEmpty, n.info)
-        else:
-          if n[0].kind in {nkDotExpr, nkCheckedFieldExpr}:
-            cycleCheck(n, c)
-          assert n[1].kind notin {nkAsgn, nkFastAsgn}
-          result = moveOrCopy(p(n[0], c, s, mode), n[1], c, s)
+        if n[0].kind in {nkDotExpr, nkCheckedFieldExpr}:
+          cycleCheck(n, c)
+        assert n[1].kind notin {nkAsgn, nkFastAsgn}
+        result = moveOrCopy(p(n[0], c, s, mode), n[1], c, s)
       elif isDiscriminantField(n[0]):
         result = c.genDiscriminantAsgn(s, n)
       else:
@@ -953,8 +951,11 @@ proc moveOrCopy(dest, ri: PNode; c: var Con; s: var Scope, isDecl = false): PNod
       result = c.genSink(dest, p(ri, c, s, consumed), isDecl)
   of nkObjConstr, nkTupleConstr, nkClosure, nkCharLit..nkNilLit:
     result = c.genSink(dest, p(ri, c, s, consumed), isDecl)
-  of nkSym:
-    if isSinkParam(ri.sym) and isLastRead(ri, c):
+  of nkSym:            
+    if dest.kind == nkSym and dest.sym == ri.sym:
+      # rule (self-assignment-removal):
+      result = newNodeI(nkEmpty, dest.info)
+    elif isSinkParam(ri.sym) and isLastRead(ri, c):
       # Rule 3: `=sink`(x, z); wasMoved(z)
       let snk = c.genSink(dest, ri, isDecl)
       result = newTree(nkStmtList, snk, c.genWasMoved(ri))

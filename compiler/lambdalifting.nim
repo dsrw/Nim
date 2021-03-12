@@ -238,10 +238,11 @@ proc liftingHarmful(conf: ConfigRef; owner: PSym): bool {.inline.} =
   result = conf.backend == backendJs and not isCompileTime
 
 proc createTypeBoundOpsLL(g: ModuleGraph; refType: PType; info: TLineInfo; owner: PSym) =
-  createTypeBoundOps(g, nil, refType.lastSon, info)
-  createTypeBoundOps(g, nil, refType, info)
-  if tfHasAsgn in refType.flags or optSeqDestructors in g.config.globalOptions:
-    owner.flags.incl sfInjectDestructors
+  if owner.kind != skMacro:
+    createTypeBoundOps(g, nil, refType.lastSon, info)
+    createTypeBoundOps(g, nil, refType, info)
+    if tfHasAsgn in refType.flags or optSeqDestructors in g.config.globalOptions:
+      owner.flags.incl sfInjectDestructors
 
 proc liftIterSym*(g: ModuleGraph; n: PNode; owner: PSym): PNode =
   # transforms  (iter)  to  (let env = newClosure[iter](); (iter, env))
@@ -295,7 +296,7 @@ proc markAsClosure(g: ModuleGraph; owner: PSym; n: PNode) =
       [s.name.s, typeToString(s.typ), g.config$s.info])
   elif not (owner.typ.callConv == ccClosure or owner.typ.callConv == ccNimCall and tfExplicitCallConv notin owner.typ.flags):
     localError(g.config, n.info, "illegal capture '$1' because '$2' has the calling convention: <$3>" %
-      [s.name.s, owner.name.s, CallingConvToStr[owner.typ.callConv]])
+      [s.name.s, owner.name.s, $owner.typ.callConv])
   incl(owner.typ.flags, tfCapturesEnv)
   owner.typ.callConv = ccClosure
 
@@ -611,7 +612,8 @@ proc rawClosureCreation(owner: PSym;
         let fieldAccess = indirectAccess(env, local, env.info)
         # add ``env.param = param``
         result.add(newAsgnStmt(fieldAccess, newSymNode(local), env.info))
-        createTypeBoundOps(d.graph, nil, fieldAccess.typ, env.info)
+        if owner.kind != skMacro:
+          createTypeBoundOps(d.graph, nil, fieldAccess.typ, env.info)
         if tfHasAsgn in fieldAccess.typ.flags or optSeqDestructors in d.graph.config.globalOptions:
           owner.flags.incl sfInjectDestructors
 

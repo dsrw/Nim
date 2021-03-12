@@ -17,21 +17,17 @@ export int128
 
 type
   TCallingConvention* = enum
-    ccNimCall                 # nimcall, also the default
-    ccStdCall                 # procedure is stdcall
-    ccCDecl                   # cdecl
-    ccSafeCall                # safecall
-    ccSysCall                 # system call
-    ccInline                  # proc should be inlined
-    ccNoInline                # proc should not be inlined
-    ccFastCall                # fastcall (pass parameters in registers)
-    ccThisCall                # thiscall (parameters are pushed right-to-left)
-    ccClosure                 # proc has a closure
-    ccNoConvention            # needed for generating proper C procs sometimes
-
-const CallingConvToStr*: array[TCallingConvention, string] = ["nimcall", "stdcall",
-  "cdecl", "safecall", "syscall", "inline", "noinline", "fastcall", "thiscall",
-  "closure", "noconv"]
+    ccNimCall = "nimcall"           # nimcall, also the default
+    ccStdCall = "stdcall"           # procedure is stdcall
+    ccCDecl = "cdecl"               # cdecl
+    ccSafeCall = "safecall"         # safecall
+    ccSysCall = "syscall"           # system call
+    ccInline = "inline"             # proc should be inlined
+    ccNoInline = "noinline"         # proc should not be inlined
+    ccFastCall = "fastcall"         # fastcall (pass parameters in registers)
+    ccThisCall = "thiscall"         # thiscall (parameters are pushed right-to-left)
+    ccClosure  = "closure"          # proc has a closure
+    ccNoConvention = "noconv"       # needed for generating proper C procs sometimes
 
 type
   TNodeKind* = enum # order is extremely important, because ranges are used
@@ -875,7 +871,7 @@ type
     annex*: PLib              # additional fields (seldom used, so we use a
                               # reference to another object to save space)
     when hasFFI:
-      cname*: string          # resolved C declaration name in importc decl, eg:
+      cname*: string          # resolved C declaration name in importc decl, e.g.:
                               # proc fun() {.importc: "$1aux".} => cname = funaux
     constraint*: PNode        # additional constraints like 'lit|result'; also
                               # misused for the codegenDecl pragma in the hope
@@ -1089,7 +1085,7 @@ proc safeLen*(n: PNode): int {.inline.} =
 
 proc safeArrLen*(n: PNode): int {.inline.} =
   ## works for array-like objects (strings passed as openArray in VM).
-  if n.kind in {nkStrLit..nkTripleStrLit}:result = n.strVal.len
+  if n.kind in {nkStrLit..nkTripleStrLit}: result = n.strVal.len
   elif n.kind in {nkNone..nkFloat128Lit}: result = 0
   else: result = n.len
 
@@ -1416,6 +1412,7 @@ proc copySym*(s: PSym): PSym =
   result.position = s.position
   result.loc = s.loc
   result.annex = s.annex      # BUGFIX
+  result.constraint = s.constraint
   if result.kind in {skVar, skLet, skField}:
     result.guard = s.guard
     result.bitsize = s.bitsize
@@ -1779,7 +1776,7 @@ proc isAtom*(n: PNode): bool {.inline.} =
   result = n.kind >= nkNone and n.kind <= nkNilLit
 
 proc isEmptyType*(t: PType): bool {.inline.} =
-  ## 'void' and 'stmt' types are often equivalent to 'nil' these days:
+  ## 'void' and 'typed' types are often equivalent to 'nil' these days:
   result = t == nil or t.kind in {tyVoid, tyTyped}
 
 proc makeStmtList*(n: PNode): PNode =
@@ -1808,6 +1805,7 @@ proc toVar*(typ: PType; kind: TTypeKind): PType =
 proc toRef*(typ: PType): PType =
   ## If ``typ`` is a tyObject then it is converted into a `ref <typ>` and
   ## returned. Otherwise ``typ`` is simply returned as-is.
+  result = typ
   if typ.skipTypes({tyAlias, tyGenericInst}).kind == tyObject:
     result = newType(tyRef, typ.owner)
     rawAddSon(result, typ)

@@ -122,7 +122,9 @@ proc genericAssignAux(dest, src: pointer, mt: PNimType, shallow: bool) =
       #     var tbObj = TB(p)
       #     tbObj of TC # needs to be false!
       #c_fprintf(stdout, "%s %s\n", pint[].name, mt.name)
-      chckObjAsgn(cast[ptr PNimType](src)[], mt)
+      let srcType = cast[ptr PNimType](src)[] # object is not initialized properly(for example std/times.DateTime)
+      if srcType != nil:
+        chckObjAsgn(srcType, mt)
       pint[] = mt # cast[ptr PNimType](src)[]
   of tyTuple:
     genericAssignAux(dest, src, mt.node, shallow)
@@ -248,9 +250,7 @@ proc genericReset(dest: pointer, mt: PNimType) =
       unsureAsgnRef(cast[PPointer](dest), nil)
   of tySequence:
     when defined(nimSeqsV2):
-      var s = cast[ptr NimSeqV2Reimpl](dest)
-      if s.p != nil:
-        deallocShared(s.p)
+      frees(cast[ptr NimSeqV2Reimpl](dest)[])
       zeroMem(dest, mt.size)
     else:
       unsureAsgnRef(cast[PPointer](dest), nil)

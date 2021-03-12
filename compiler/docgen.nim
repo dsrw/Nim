@@ -30,7 +30,7 @@ type
   ExampleGroup = ref object
     ## a group of runnableExamples with same rdoccmd
     rdoccmd: string ## from 1st arg in `runnableExamples(rdoccmd): body`
-    docCmd: string ## from user config, eg --doccmd:-d:foo
+    docCmd: string ## from user config, e.g. --doccmd:-d:foo
     code: string ## contains imports; each import contains `body`
     index: int ## group index
   TDocumentor = object of rstgen.RstGenerator
@@ -168,7 +168,7 @@ proc newDocumentor*(filename: AbsoluteFile; cache: IdentCache; conf: ConfigRef, 
   result.module = module
   result.conf = conf
   result.cache = cache
-  result.outDir = conf.outDir
+  result.outDir = conf.outDir.string
   initRstGenerator(result[], (if conf.cmd != cmdRst2tex: outHtml else: outLatex),
                    conf.configVars, filename.string, {roSupportRawDirective, roSupportMarkdown},
                    docgenFindFile, compilerMsgHandler)
@@ -230,8 +230,8 @@ proc newDocumentor*(filename: AbsoluteFile; cache: IdentCache; conf: ConfigRef, 
       if gotten != status:
         rawMessage(conf, errGenerated, "snippet failed: cmd: '$1' status: $2 expected: $3 output: $4" % [cmd, $gotten, $status, output])
   result.emitted = initIntSet()
-  result.destFile = getOutFile2(conf, presentationPath(conf, filename), outExt, false)
-  result.thisDir = result.destFile.splitFile.dir
+  result.destFile = getOutFile2(conf, presentationPath(conf, filename), outExt, false).string
+  result.thisDir = result.destFile.AbsoluteFile.splitFile.dir
 
 template dispA(conf: ConfigRef; dest: var Rope, xml, tex: string, args: openArray[Rope]) =
   if conf.cmd != cmdRst2tex: dest.addf(xml, args)
@@ -457,7 +457,7 @@ proc writeExample(d: PDoc; ex: PNode, rdoccmd: string) =
 
 proc runAllExamples(d: PDoc) =
   # This used to be: `let backend = if isDefined(d.conf, "js"): "js"` (etc), however
-  # using `-d:js` (etc) cannot work properly, eg would fail with `importjs`
+  # using `-d:js` (etc) cannot work properly, e.g. would fail with `importjs`
   # since semantics are affected by `config.backend`, not by isDefined(d.conf, "js")
   let outputDir = d.exampleOutputDir
   for _, group in d.exampleGroups:
@@ -591,8 +591,10 @@ proc getRoutineBody(n: PNode): PNode =
   (0 or more) doc comments and runnableExamples.
   ]##
   result = n[bodyPos]
-  if result.kind == nkAsgn and n.len > bodyPos+1 and n[bodyPos+1].kind == nkSym:
-    doAssert result[0].kind == nkSym
+
+  # This won't be transformed: result.id = 10. Namely result[0].kind != nkSym.
+  if result.kind == nkAsgn and result[0].kind == nkSym and
+                               n.len > bodyPos+1 and n[bodyPos+1].kind == nkSym:
     doAssert result.len == 2
     result = result[1]
 
@@ -715,7 +717,7 @@ proc complexName(k: TSymKind, n: PNode, baseName: string): string =
   of skTemplate: result.add(".t")
   of skConverter: result.add(".c")
   else: discard
-  if n.len > paramsPos and n[paramsPos].kind == nkFormalParams:
+  if n.safeLen > paramsPos and n[paramsPos].kind == nkFormalParams:
     let params = renderParamTypes(n[paramsPos])
     if params.len > 0:
       result.add(defaultParamSeparator)
@@ -849,7 +851,7 @@ proc genItem(d: PDoc, n, nameNode: PNode, k: TSymKind, docFlags: DocFlags) =
       symbolOrIdRope, plainSymbolEncRope, symbolOrIdEncRope, seeSrcRope,
       deprecationMsgRope]))
 
-  let external = d.destFile.relativeTo(d.conf.outDir, '/').changeFileExt(HtmlExt).string
+  let external = d.destFile.AbsoluteFile.relativeTo(d.conf.outDir, '/').changeFileExt(HtmlExt).string
 
   var attype: Rope
   if k in routineKinds and nameNode.kind == nkSym:
@@ -866,19 +868,13 @@ proc genItem(d: PDoc, n, nameNode: PNode, k: TSymKind, docFlags: DocFlags) =
         xmltree.escape(getPlainDocstring(e).docstringSummary))
 
   d.toc[k].add(ropeFormatNamedVars(d.conf, getConfigVar(d.conf, "doc.item.toc"),
-    ["name", "header", "desc", "itemID", "header_plain", "itemSym",
-      "itemSymOrID", "itemSymEnc", "itemSymOrIDEnc", "attype"],
-    [rope(getName(d, nameNode, d.splitAfter)), result, comm,
-      itemIDRope, plainNameRope, plainSymbolRope, symbolOrIdRope,
-      plainSymbolEncRope, symbolOrIdEncRope, attype]))
+    ["name", "header_plain", "itemSymOrIDEnc"],
+    [nameRope, plainNameRope, symbolOrIdEncRope]))
 
   d.tocTable[k].mgetOrPut(cleanPlainSymbol, nil).add(ropeFormatNamedVars(
     d.conf, getConfigVar(d.conf, "doc.item.tocTable"),
-    ["name", "header", "desc", "itemID", "header_plain", "itemSym",
-     "itemSymOrID", "itemSymEnc", "itemSymOrIDEnc", "attype"],
-    [rope(getName(d, nameNode, d.splitAfter)), result, comm,
-     itemIDRope, plainNameRope, plainSymbolRope,
-     symbolOrIdRope, plainSymbolEncRope, symbolOrIdEncRope, attype]))
+    ["name", "header_plain", "itemSymOrID", "itemSymOrIDEnc"],
+    [nameRope, plainNameRope, rope(symbolOrId.replace(",", ",<wbr>")), symbolOrIdEncRope]))
 
   # Ironically for types the complexSymbol is *cleaner* than the plainName
   # because it doesn't include object fields or documentation comments. So we
@@ -970,13 +966,17 @@ proc exportSym(d: PDoc; s: PSym) =
   elif s.kind != skModule and s.owner != nil:
     let module = originatingModule(s)
     if belongsToPackage(d.conf, module):
-      let external = externalDep(d, module)
+      let
+        complexSymbol = complexName(s.kind, s.ast, s.name.s)
+        symbolOrIdRope = rope(d.newUniquePlainSymbol(complexSymbol))
+        external = externalDep(d, module)
       if d.section[k] != nil: d.section[k].add(", ")
       # XXX proper anchor generation here
       dispA(d.conf, d.section[k],
-            "<a href=\"$2#$1\"><span class=\"Identifier\">$1</span></a>",
+            "<a href=\"$2#$3\"><span class=\"Identifier\">$1</span></a>",
             "$1", [rope esc(d.target, s.name.s),
-            rope changeFileExt(external, "html")])
+            rope changeFileExt(external, "html"),
+            symbolOrIdRope])
 
 proc documentNewEffect(cache: IdentCache; n: PNode): PNode =
   let s = n[namePos].sym
@@ -1002,7 +1002,7 @@ proc documentEffect(cache: IdentCache; n, x: PNode, effectType: TSpecialWord, id
       effects[i].typ = real[i].typ
 
     result = newTreeI(nkExprColonExpr, n.info,
-      newIdentNode(getIdent(cache, specialWords[effectType]), n.info), effects)
+      newIdentNode(getIdent(cache, $effectType), n.info), effects)
 
 proc documentWriteEffect(cache: IdentCache; n: PNode; flag: TSymFlag; pragmaName: string): PNode =
   let s = n[namePos].sym
@@ -1079,7 +1079,7 @@ proc generateDoc*(d: PDoc, n, orig: PNode, docFlags: DocFlags = kDefault) =
       if it.kind == nkSym:
         if d.module != nil and d.module == it.sym.owner:
           generateDoc(d, it.sym.ast, orig, kForceExport)
-        else:
+        elif it.sym.ast != nil:
           exportSym(d, it.sym)
   of nkExportExceptStmt: discard "transformed into nkExportStmt by semExportExcept"
   of nkFromStmt, nkImportExceptStmt: traceDeps(d, n[0])
@@ -1237,14 +1237,14 @@ proc genOutFile(d: PDoc, groupedToc = false): Rope =
   content = ropeFormatNamedVars(d.conf, getConfigVar(d.conf, bodyname), ["title",
       "tableofcontents", "moduledesc", "date", "time", "content", "deprecationMsg", "theindexhref", "body_toc_groupsection"],
       [title.rope, toc, d.modDesc, rope(getDateStr()),
-      rope(getClockStr()), code, d.modDeprecationMsg, relLink(d.conf.outDir, d.destFile, theindexFname.RelativeFile), groupsection.rope])
+      rope(getClockStr()), code, d.modDeprecationMsg, relLink(d.conf.outDir, d.destFile.AbsoluteFile, theindexFname.RelativeFile), groupsection.rope])
   if optCompileOnly notin d.conf.globalOptions:
     # XXX what is this hack doing here? 'optCompileOnly' means raw output!?
     code = ropeFormatNamedVars(d.conf, getConfigVar(d.conf, "doc.file"), [
         "nimdoccss", "dochackjs",  "title", "tableofcontents", "moduledesc", "date", "time",
         "content", "author", "version", "analytics", "deprecationMsg"],
-        [relLink(d.conf.outDir, d.destFile, nimdocOutCss.RelativeFile),
-        relLink(d.conf.outDir, d.destFile, docHackJsFname.RelativeFile),
+        [relLink(d.conf.outDir, d.destFile.AbsoluteFile, nimdocOutCss.RelativeFile),
+        relLink(d.conf.outDir, d.destFile.AbsoluteFile, docHackJsFname.RelativeFile),
         title.rope, toc, d.modDesc, rope(getDateStr()), rope(getClockStr()),
         content, d.meta[metaAuthor].rope, d.meta[metaVersion].rope, d.analytics.rope, d.modDeprecationMsg])
   else:
@@ -1259,7 +1259,7 @@ proc generateIndex*(d: PDoc) =
     writeIndexFile(d[], dest.string)
 
 proc updateOutfile(d: PDoc, outfile: AbsoluteFile) =
-  if d.module == nil or sfMainModule in d.module.flags: # nil for eg for commandRst2Html
+  if d.module == nil or sfMainModule in d.module.flags: # nil for e.g. for commandRst2Html
     if d.conf.outFile.isEmpty:
       d.conf.outFile = outfile.relativeTo(d.conf.outDir)
       if isAbsolute(d.conf.outFile.string):
@@ -1271,7 +1271,7 @@ proc writeOutput*(d: PDoc, useWarning = false, groupedToc = false) =
   if optStdout in d.conf.globalOptions:
     writeRope(stdout, content)
   else:
-    template outfile: untyped = d.destFile
+    template outfile: untyped = d.destFile.AbsoluteFile
     #let outfile = getOutFile2(d.conf, shortenDir(d.conf, filename), outExt)
     let dir = outfile.splitFile.dir
     createDir(dir)
@@ -1300,13 +1300,13 @@ proc writeOutputJson*(d: PDoc, useWarning = false) =
     write(stdout, $content)
   else:
     var f: File
-    if open(f, d.destFile.string, fmWrite):
+    if open(f, d.destFile, fmWrite):
       write(f, $content)
       close(f)
-      updateOutfile(d, d.destFile)
+      updateOutfile(d, d.destFile.AbsoluteFile)
     else:
       localError(d.conf, newLineInfo(d.conf, AbsoluteFile d.filename, -1, -1),
-                 warnUser, "unable to open file \"" & d.destFile.string &
+                 warnUser, "unable to open file \"" & d.destFile &
                  "\" for writing")
 
 proc handleDocOutputOptions*(conf: ConfigRef) =

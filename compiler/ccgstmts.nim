@@ -25,10 +25,10 @@ proc getTraverseProc(p: BProc, v: PSym): Rope =
 
 proc registerTraverseProc(p: BProc, v: PSym, traverseProc: Rope) =
   if sfThread in v.flags:
-    appcg(p.module, p.module.initProc.procSec(cpsInit),
+    appcg(p.module, p.module.preInitProc.procSec(cpsInit),
       "$n\t#nimRegisterThreadLocalMarker($1);$n$n", [traverseProc])
   else:
-    appcg(p.module, p.module.initProc.procSec(cpsInit),
+    appcg(p.module, p.module.preInitProc.procSec(cpsInit),
       "$n\t#nimRegisterGlobalMarker($1);$n$n", [traverseProc])
 
 proc isAssignedImmediately(conf: ConfigRef; n: PNode): bool {.inline.} =
@@ -382,7 +382,13 @@ proc genSingleVar(p: BProc, v: PSym; vn, value: PNode) =
 
 proc genSingleVar(p: BProc, a: PNode) =
   let v = a[0].sym
-  if sfCompileTime in v.flags: return
+  if sfCompileTime in v.flags:
+    # fix issue #12640
+    # {.global, compileTime.} pragma in proc
+    if sfGlobal in v.flags and p.prc != nil and p.prc.kind == skProc:
+      discard
+    else:
+      return
   genSingleVar(p, v, a[0], a[2])
 
 proc genClosureVar(p: BProc, a: PNode) =

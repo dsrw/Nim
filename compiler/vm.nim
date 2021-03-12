@@ -772,7 +772,7 @@ proc rawExecute(c: PCtx, start: int, tos: PStackFrame): TFullReg =
         if regs[rb].node.kind == nkRefTy:
           regs[ra].node = regs[rb].node[0]
         elif not maybeHandlePtr(regs[rb].node, regs[ra], false):
-          ## eg: typ.kind = tyObject
+          ## e.g.: typ.kind = tyObject
           ensureKind(rkNode)
           regs[ra].node = regs[rb].node
       else:
@@ -1001,8 +1001,10 @@ proc rawExecute(c: PCtx, start: int, tos: PStackFrame): TFullReg =
         let nb = regs[rb].node
         let nc = regs[rc].node
         if nb.kind != nc.kind: discard
-        elif (nb == nc) or (nb.kind == nkNilLit): ret = true
-        elif nb.kind == nkIntLit and nb.intVal == nc.intVal: # TODO: nkPtrLit
+        elif (nb == nc) or (nb.kind == nkNilLit): ret = true # intentional
+        elif sameConstant(nb, nc): ret = true
+          # this also takes care of procvar's, represented as nkTupleConstr, e.g. (nil, nil)
+        elif nb.kind == nkIntLit and nc.kind == nkIntLit and nb.intVal == nc.intVal: # TODO: nkPtrLit
           let tb = nb.getTyp
           let tc = nc.getTyp
           ret = tb.kind in PtrLikeKinds and tc.kind == tb.kind
@@ -2090,6 +2092,7 @@ proc execFromCtx*(c: PCtx, pc: int, tos: PStackFrame): PNode =
   result = rawExecute(c, pc, tos).regToNode
   
 proc execProc*(c: PCtx; sym: PSym; args: openArray[PNode]): PNode =
+  c.loopIterations = c.config.maxLoopIterationsVM
   if sym.kind in routineKinds:
     if sym.typ.len-1 != args.len:
       localError(c.config, sym.info,

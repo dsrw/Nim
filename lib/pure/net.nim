@@ -24,6 +24,17 @@
 ## `newContext<net.html#newContext%2Cstring%2Cstring%2Cstring%2Cstring%2Cstring>`_
 ## procedure for additional details.
 ##
+##
+## SSL on Windows
+## ==============
+##
+## On Windows the SSL library checks for valid certificates.
+## It uses the `cacert.pem` file for this purpose which was extracted
+## from `https://curl.se/ca/cacert.pem`. Besides
+## the OpenSSL DLLs (e.g. libssl-1_1-x64.dll, libcrypto-1_1-x64.dll) you
+## also need to ship `cacert.pem` with your `.exe` file.
+##
+##
 ## Examples
 ## ========
 ##
@@ -626,11 +637,13 @@ when defineSsl:
     discard newCTX.SSLCTXSetMode(SSL_MODE_AUTO_RETRY)
     newCTX.loadCertificates(certFile, keyFile)
 
-    when not defined(nimDisableCertificateValidation) and not defined(windows):
+    const VerifySuccess = 1 # SSL_CTX_load_verify_locations returns 1 on success.
+
+    when not defined(nimDisableCertificateValidation):
       if verifyMode != CVerifyNone:
         # Use the caDir and caFile parameters if set
         if caDir != "" or caFile != "":
-          if newCTX.SSL_CTX_load_verify_locations(caFile, caDir) != 0:
+          if newCTX.SSL_CTX_load_verify_locations(caFile, caDir) != VerifySuccess:
             raise newException(IOError, "Failed to load SSL/TLS CA certificate(s).")
 
         else:
@@ -638,7 +651,7 @@ when defineSsl:
           # the SSL_CERT_FILE and SSL_CERT_DIR env vars
           var found = false
           for fn in scanSSLCertificates():
-            if newCTX.SSL_CTX_load_verify_locations(fn, "") == 0:
+            if newCTX.SSL_CTX_load_verify_locations(fn, nil) == VerifySuccess:
               found = true
               break
           if not found:
@@ -1827,6 +1840,10 @@ proc `$`*(address: IpAddress): string =
                 result.add(chr(uint16(ord('a'))+val-0xA))
               afterLeadingZeros = true
             mask = mask shr 4
+
+          if not afterLeadingZeros:
+            result.add '0'
+
           printedLastGroup = true
 
 proc dial*(address: string, port: Port,
