@@ -44,6 +44,8 @@ const
   regBxMin* = -wordExcess+1
   regBxMax* =  wordExcess-1
 
+  callVMExecHooks* = defined(vmExecHooks)
+
 type
   TRegister* = range[0..regAMask.int]
   TDest* = range[-1..regAMask.int]
@@ -273,6 +275,11 @@ type
     procToCodePos*: Table[int, int]
     cannotEval*: bool
     locals*: IntSet
+
+    when callVMExecHooks:
+      exitHook*: proc (c: PCtx, pc: int, tos: PStackFrame)
+      enterHook*: proc (c: PCtx, pc: int, tos: PStackFrame, instr: TInstr)
+      leaveHook*: proc (c: PCtx, pc: int, tos: PStackFrame, instr: TInstr)
 
   PStackFrame* = ref TStackFrame
   TStackFrame* {.acyclic.} = object
