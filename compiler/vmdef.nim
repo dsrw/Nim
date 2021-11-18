@@ -44,6 +44,8 @@ const
   regBxMin* = -wordExcess+1
   regBxMax* =  wordExcess-1
 
+  callVMExecHooks* = defined(vmExecHooks)
+
 type
   TRegister* = range[0..regAMask.int]
   TDest* = range[-1..regAMask.int]
@@ -268,6 +270,11 @@ type
     templInstCounter*: ref int # gives every template instantiation a unique ID, needed here for getAst
     vmstateDiff*: seq[(PSym, PNode)] # we remember the "diff" to global state here (feature for IC)
     procToCodePos*: Table[int, int]
+
+    when callVMExecHooks:
+      exitHook*: proc (c: PCtx, pc: int, tos: PStackFrame)
+      enterHook*: proc (c: PCtx, pc: int, tos: PStackFrame, instr: TInstr)
+      leaveHook*: proc (c: PCtx, pc: int, tos: PStackFrame, instr: TInstr)
 
   PStackFrame* = ref TStackFrame
   TStackFrame* {.acyclic.} = object
