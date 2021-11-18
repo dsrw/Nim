@@ -533,6 +533,12 @@ proc rawExecute(c: PCtx, start: int, tos: PStackFrame): TFullReg =
       move(regs, tos.slots)
     var regs: seq[TFullReg] # alias to tos.slots for performance
     updateRegsAlias
+
+  when callVMExecHooks:
+    defer:
+      if not c.exitHook.isNil:
+        c.exitHook(c, pc, tos)
+
   #echo "NEW RUN ------------------------"
   while true:
     #{.computedGoto.}
@@ -554,6 +560,11 @@ proc rawExecute(c: PCtx, start: int, tos: PStackFrame): TFullReg =
       # other useful variables: c.loopIterations
       echo "$# [$#] $#" % [c.config$info, $instr.opcode, c.config.sourceLine(info)]
     c.profiler.enter(c, tos)
+
+    when callVMExecHooks:
+      if not c.enterHook.isNil:
+        c.enterHook(c, pc, tos, instr)
+
     case instr.opcode
     of opcEof: return regs[ra]
     of opcRet:
@@ -2107,13 +2118,18 @@ proc rawExecute(c: PCtx, start: int, tos: PStackFrame): TFullReg =
       storeAny(regs[ra].node.strVal, typ, regs[rb].regToNode, c.config)
 
     c.profiler.leave(c)
-
+    when callVMExecHooks:
+     if not c.leaveHook.isNil:
+       c.leaveHook(c, pc, tos, instr)
     inc pc
 
 proc execute(c: PCtx, start: int): PNode =
   var tos = PStackFrame(prc: nil, comesFrom: 0, next: nil)
   newSeq(tos.slots, c.prc.regInfo.len)
   result = rawExecute(c, start, tos).regToNode
+
+proc execFromCtx*(c: PCtx, pc: int, tos: PStackFrame): PNode =
+  result = rawExecute(c, pc, tos).regToNode
 
 proc execProc*(c: PCtx; sym: PSym; args: openArray[PNode]): PNode =
   c.loopIterations = c.config.maxLoopIterationsVM
