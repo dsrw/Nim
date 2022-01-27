@@ -245,6 +245,9 @@ proc rtlAddZCT(c: PCell) {.rtl, inl.} =
 proc decRef(c: PCell) {.inline.} =
   gcAssert(isAllocatedPtr(gch.region, c), "decRef: interiorPtr")
   gcAssert(c.refcount >=% rcIncrement, "decRef")
+  when defined(enuHacks):
+    if c == nil:
+      return
   c.refcount = c.refcount -% rcIncrement
   if c.refcount <% rcIncrement:
     rtlAddZCT(c)
@@ -374,6 +377,9 @@ proc forAllChildren(cell: PCell, op: WalkOp) =
   gcAssert(isAllocatedPtr(gch.region, cell), "forAllChildren: pointer not part of the heap")
   gcAssert(cell.typ != nil, "forAllChildren: cell.typ is nil")
   gcAssert cell.typ.kind in {tyRef, tySequence, tyString}, "forAllChildren: unknown GC'ed type"
+  when defined(enuHacks):
+    if cell.typ == nil:
+      return
   let marker = cell.typ.marker
   if marker != nil:
     marker(cellToUsr(cell), op.int)
