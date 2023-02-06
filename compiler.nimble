@@ -1,5 +1,6 @@
 
-version = "1.6.4"
+# Should be 1.6.4. Done to make nimble happy.
+version = "1.6.6"
 author = "Andreas Rumpf"
 description = "Compiler package providing the compiler sources as a library."
 license = "MIT"
