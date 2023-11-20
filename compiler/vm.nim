@@ -1898,8 +1898,12 @@ proc rawExecute(c: PCtx, start: int, tos: PStackFrame): TFullReg =
     of opcSlurp:
       decodeB(rkNode)
       createStr regs[ra]
-      regs[ra].node.strVal = opSlurp(regs[rb].node.strVal, c.debug[pc],
-                                     c.module, c.config)
+      when defined(nimcore):
+        regs[ra].node.strVal = opSlurp(regs[rb].node.strVal, c.debug[pc],
+                                      c.module, c.config)
+      else:
+        regs[ra].node.strVal = ""
+        globalError(c.config, c.debug[pc], "VM is not built with 'slurp' support")
     of opcGorge:
       decodeBC(rkNode)
       inc pc
