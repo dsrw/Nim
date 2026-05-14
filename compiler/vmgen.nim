@@ -622,6 +622,16 @@ proc genCall(c: PCtx; n: PNode; dest: var TDest) =
   #  return
   # bug #10901: do not produce code for wrong call expressions:
   if n.len == 0 or n[0].typ.isNil: return
+
+  # Enu yield marker. The user-script template for sleep / begin_move /
+  # etc. emits a call to this magic proc; vmgen recognizes the name and
+  # emits opcEnuYield instead of a normal call. At runtime that fires
+  # the PCtx.yieldHook which the host uses to save (c, pc, tos) and
+  # raise its VMPause. Resume calls execFromCtx with the saved state.
+  if n.len == 1 and n[0].kind == nkSym and n[0].sym.name.s == "enu_vm_yield":
+    c.gABC(n, opcEnuYield, 0, 0, 0)
+    return
+
   if dest < 0 and not isEmptyType(n.typ): dest = getTemp(c, n.typ)
   let x = c.getTempRange(n.len, slotTempUnknown)
   # varargs need 'opcSetType' for the FFI support:

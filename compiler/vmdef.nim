@@ -56,6 +56,7 @@ type
     opcRet,         # return
     opcYldYoid,     # yield with no value
     opcYldVal,      # yield with a value
+    opcEnuYield,    # Enu: yield rawExecute back to host (frame-consistent)
 
     opcAsgnInt,
     opcAsgnFloat,
@@ -286,6 +287,10 @@ type
       exitHook*: proc (c: PCtx, pc: int, tos: PStackFrame)
       enterHook*: proc (c: PCtx, pc: int, tos: PStackFrame, instr: TInstr)
       leaveHook*: proc (c: PCtx, pc: int, tos: PStackFrame, instr: TInstr)
+      yieldHook*: proc (c: PCtx, pc: int, tos: PStackFrame)
+        ## Fires at opcEnuYield, just before unwinding rawExecute via
+        ## VMPause. Host saves (c, pc, tos) here for the matching
+        ## ctx.resume() → execFromCtx call.
 
   PStackFrame* = ref TStackFrame
   TStackFrame* {.acyclic.} = object

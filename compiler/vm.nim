@@ -621,6 +621,17 @@ proc rawExecute(c: PCtx, start: int, tos: PStackFrame): TFullReg =
         pc = newPc - 1
     of opcYldYoid: assert false
     of opcYldVal: assert false
+    of opcEnuYield:
+      # Enu's frame-consistent suspend. Emitted by vmgen at user-script
+      # yield points (sleep, begin_move, etc.). Save resume state via
+      # yieldHook then let the host raise its own VMPause to unwind
+      # rawExecute; ctx.resume() will call execFromCtx(c, savedPc,
+      # savedTos) to continue.
+      inc pc  # resume past the yield
+      when callVMExecHooks:
+        if not c.yieldHook.isNil:
+          c.yieldHook(c, pc, tos)
+      # If no hook (or hook didn't raise), opcEnuYield is a no-op.
     of opcAsgnInt:
       decodeB(rkInt)
       if regs[rb].kind == rkInt:
